@@ -1,0 +1,159 @@
+#Keaton Spiller
+#CS 445
+#January 2022
+#HW 1
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def load_training():
+    df = pd.read_csv('mnist_train.csv')
+    true_basis = df['label'].to_numpy()
+    del df['label']
+    return true_basis,df
+	
+'''''
+Now for the Test set of 10,000 images using the trained Weights
+'''''
+df2 = pd.read_csv('mnist_test.csv')
+true_basis2 = df2['label'].to_numpy()
+del df2['label']
+df2
+
+def Shape_Pictures(df):
+    X = df.to_numpy()
+    m = X.shape[0]
+    inputs = X.shape[1]+1
+    bias = np.ones((m, 1))
+    X = np.concatenate((bias, X), axis=1)
+    X = X / (255)
+
+    print(str(m) +"  Pictures")
+    print(str(inputs) + " for 28 x 28 pixels and 1 Bias")
+
+    print(X.shape)
+    return X, m, inputs, bias
+X, m, inputs, bias = Shape_Pictures(df)
+
+true_basis,df = load_training()
+X, m, inputs, bias = Shape_Pictures(df)
+X2, m2, inputs2, bias2 = Shape_Pictures(df2)
+
+n =  100 # hidden nodes want to find [20, 50, 100]
+eta = 0.1 # Learning Rate
+momentum = 0.9
+epoch = 50
+hidden_bias = np.ones((1, 1))
+
+weights_ij = np.random.rand(n,inputs)*(0.05 - (-0.05)) + -0.05
+weights_kj = np.random.rand(10,n+1)*(0.05 - (-0.05)) + -0.05
+Changed_weight_kj = np.zeros((10,n+1))
+Changed_weight_ji = np.zeros((n,785))
+
+h_j = np.zeros((n,1))
+o_k = np.zeros((10,1))
+
+h_j2 = np.zeros((n,1))
+o_k2 = np.zeros((10,1))
+
+train_correct_epoch = np.zeros((epoch,1)) 
+test_correct_epoch = np.zeros((epoch,1)) 
+
+def forward_pass(weights_ij, weights_kj, X, i, h_j, hidden_bias):
+    h_j = np.dot(weights_ij, np.expand_dims(X[i], axis=1)) # Forward Pass hidden nodes
+        
+    e =  np.exp(-1.0 * h_j) 
+    h_j = 1.0 / ( 1.0 + e)
+        
+    h_j = np.concatenate((hidden_bias, h_j), axis=0) # forward pass outputs # add to hidden bias weight 1 * random weight
+    o_k = np.dot(weights_kj, h_j)
+    e = np.exp(-1.0 * o_k)
+    o_k = 1.0 / ( 1.0 + e)
+    return o_k, h_j
+
+def backwards_pass(true_basis, o_k, weights_kj, h_j , Changed_weight_kj, Changed_weight_ji, X, i, momentum, weights_ij, correct, train):
+    tk = np.ones((10, 1)) * 0.1 # Backwards Pass
+    label = int(true_basis[i]) # 0 1 2 3 4 5 6 7 8 9
+
+    tk[label]=0.9 # say 4   [0000(0.9)000000] 0's replaced with 0.1
+    delta_k = o_k*(1.0 - o_k)*(tk - o_k)
+    w_trans =  np.transpose(weights_kj)
+    
+    weight_error = w_trans[1:n+1,:] # subset the hidden weight errors without the bias node 
+
+    h_error = h_j[1:n+1,:] * ( 1.0 - h_j[1:n+1,:]) # hidden node error 
+    
+    delta_j = h_error * (np.dot(weight_error,delta_k)) # find error of hidden nodes without the bias node
+    
+    Changed_weight_kj = (eta * np.dot(delta_k, np.transpose(h_j))) + (momentum * (Changed_weight_kj) ) # changed weight of output to hidden /vice versa
+    
+    Changed_weight_ji = (eta * np.dot(delta_j, np.expand_dims(X[i], axis=0))) + (momentum * (Changed_weight_ji) )# changed weight of hidden to input /vice versa
+    weights_ij = weights_ij + Changed_weight_ji
+    weights_kj = weights_kj + Changed_weight_kj 
+
+    if(label == np.argmax(o_k)): # most highly activated output unit is the prediction
+        correct += 1
+        
+    return correct, o_k, weights_kj, h_j , Changed_weight_kj, Changed_weight_ji, weights_ij
+
+for epoch in range(epoch):
+    train_correct = 0
+    test_correct = 0
+    for i in range(0,m): # 0 to total number of training pictures
+        
+        o_k, h_j = forward_pass(
+            weights_ij, weights_kj, X, i, h_j, hidden_bias)
+        
+        train_correct, o_k, weights_kj, h_j , Changed_weight_kj, Changed_weight_ji, weights_ij = backwards_pass(
+            true_basis, o_k, weights_kj, h_j , Changed_weight_kj,
+            Changed_weight_ji, X, i, momentum, weights_ij, train_correct, True)
+    for i in range(0, m2):
+        o_k2, h_j2 = forward_pass(
+            weights_ij,weights_kj, X2, i, h_j2, hidden_bias)
+        
+        label2 = int(true_basis2[i]) # 0 1 2 3 4 5 6 7 8 9
+        if(label2 == np.argmax(o_k2)): # most highly activated output unit is the prediction
+            test_correct += 1
+        
+    X = np.append(X, np.expand_dims(true_basis,axis = 1), axis= 1) # Shuffle pictures randomly with the true labels associated with the pictures
+    np.take(X,np.random.permutation(X.shape[0]),axis=0,out=X)   
+    true_basis = X[:,785:]
+    true_basis= true_basis.flatten()
+    X= X[:,:785]
+    
+    train_correct_epoch[epoch] = train_correct/m
+    test_correct_epoch[epoch] = test_correct/m2
+	
+plt.xlim=(0,epoch+1)
+plt.ylim=(0,1)
+epoch_axis = np.arange(epoch+1)
+plt.title("Accuracy per epoch") 
+plt.xlabel("epoch") 
+plt.ylabel("accuracy per image") 
+plt.plot(epoch_axis,train_correct_epoch,color='r', label='train_correct') 
+plt.plot(epoch_axis,test_correct_epoch,color='g', label='test_correct')
+plt.legend(['train_correct', 'test_correct'])
+# plt.axhline(y = initial_correct_test, color = 'r', linestyle = '-')
+plt.show()
+print(train_correct_epoch[epoch])
+print(test_correct_epoch[epoch])
+
+confusion_correct =  0
+confusion_matrix = np.zeros((10, 10))
+for i in range(0, m2):
+    o_k2, h_j2 = forward_pass(
+        weights_ij,weights_kj, X2, i, h_j2, hidden_bias)
+    
+    label2 = int(true_basis2[i]) # 0 1 2 3 4 5 6 7 8 9
+    if(label2 == np.argmax(o_k2)): # most highly activated output unit is the prediction
+        test_correct += 1
+        confusion_correct += 1
+        confusion_matrix[label2][label2] += 1
+    if(label2 != np.argmax(o_k2)):
+            label2_false = np.argmax(o_k2)
+            confusion_matrix[label2][label2_false] += 1
+print("Accuracy " + str(confusion_correct/m2))
+confusion_matrix = pd.DataFrame(confusion_matrix)
+
+confusion_matrix
