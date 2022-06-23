@@ -1,6 +1,7 @@
 # MNIST
 MNIST 0-9 classification with Neural Networks
 
+* Requirements
 * Python version 3.10 or later
 * Jupyter Notebook
 
